@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio and Image Recorder</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-color: #f0f0f0;
+        }
+        h2, h3 {
+            color: #333;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 10px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            background-color: #4CAF50;
+            color: white;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #transcriptions {
+            margin-top: 20px;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            text-align: left;
+        }
+        .transcription {
+            background-color: #fff;
+            border: 1px solid #ccc;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        #video {
+            margin-top: 20px;
+            width: 320px;
+            height: 240px;
+            background-color: #ddd;
+            border: 2px solid #ccc;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h2>Audio and Image Recorder</h2>
+    
+    <!-- Audio Recording Section -->
+    <h3>Record Audio</h3>
+    <button onclick="startRecording()">Start Recording</button>
+    <button onclick="stopRecording()">Stop and Send Audio</button>
+    
+    <!-- Webcam Capture Section -->
+    <h3>Capture Image from Webcam</h3>
+    <video id="video" autoplay></video>
+    <button onclick="captureImage()">Capture and Send Image</button>
+    
+    <!-- Screenshot Capture Section -->
+    <h3>Take Screenshot</h3>
+    <button onclick="takeScreenshot()">Take Screenshot (5 seconds delay)</button>
+    
+    <div id="transcriptions"></div>
+    
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+        let videoStream;
+
+        // Initialize Webcam on Page Load
+        async function setupWebcam() {
+            try {
+                videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                document.getElementById('video').srcObject = videoStream;
+            } catch (error) {
+                console.error("Error accessing webcam:", error);
+                alert("Could not access the webcam. Please allow webcam access.");
+            }
+        }
+        window.onload = setupWebcam;
+
+        // Audio Recording Functions
+        async function startRecording() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                mediaRecorder.start();
+                audioChunks = [];
+                mediaRecorder.ondataavailable = (event) => {
+                    audioChunks.push(event.data);
+                };
+                console.log("Audio recording started.");
+            } catch (error) {
+                console.error("Error accessing microphone:", error);
+                alert("Could not access the microphone. Please allow microphone access.");
+            }
+        }
+
+        async function stopRecording() {
+            if (!mediaRecorder) {
+                alert("No recording in progress.");
+                return;
+            }
+            mediaRecorder.stop();
+            mediaRecorder.onstop = async () => {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                const formData = new FormData();
+                formData.append('file', audioBlob, 'recording.webm');
+
+                console.log("Sending audio to backend...");
+                try {
+                    const response = await fetch("Replace with the link generated from python code/upload", {  // Replace with your ngrok URL
+                        method: "POST",
+                        body: formData,
+                    });
+
+                    const result = await response.json();
+                    displayTranscription(result);
+                    /*
+                    if (result.audio_url) {
+                        displayTranscription(result);
+                        playAudio(result);
+                        //playAudio("Replace with the link generated from python code" + result.audio_url);  // Complete URL for download_audio
+                    } else {
+                        console.error("No audio URL provided in the response.");
+                    }*/
+                } catch (error) {
+                    console.error("Error sending audio:", error);
+                    alert("Failed to send audio to the server.");
+                }
+            };
+        }
+
+        // Webcam Capture Functions
+        async function captureImage() {
+            const video = document.getElementById('video');
+            if (!videoStream) {
+                alert("Webcam not initialized.");
+                return;
+            }
+
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const context = canvas.getContext('2d');
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            const imageBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg'));
+            const formData = new FormData();
+            formData.append('file', imageBlob, 'webcam_capture.jpg');
+
+            console.log("Sending webcam image to backend...");
+            try {
+                const response = await fetch("Replace with the link generated from python code/upload_image", {  // Replace with your ngrok URL
+                    method: "POST",
+                    body: formData,
+                });
+
+                const result = await response.json();
+                displayTranscription(result);
+            } catch (error) {
+                console.error("Error sending webcam image:", error);
+                alert("Failed to send webcam image to the server.");
+            }
+        }
+
+        // Screenshot Capture Functions
+        async function takeScreenshot() {
+            console.log("Waiting 5 seconds before taking screenshot...");
+            await new Promise(resolve => setTimeout(resolve, 5000));
+
+            try {
+                const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+                const videoTrack = stream.getVideoTracks()[0];
+                const imageCapture = new ImageCapture(videoTrack);
+                const bitmap = await imageCapture.grabFrame();
+
+                const canvas = document.createElement('canvas');
+                canvas.width = bitmap.width;
+                canvas.height = bitmap.height;
+                const context = canvas.getContext('2d');
+                context.drawImage(bitmap, 0, 0);
+
+                const screenshotBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg'));
+                const formData = new FormData();
+                formData.append('file', screenshotBlob, 'screenshot.jpg');
+
+                console.log("Sending screenshot to backend...");
+                const response = await fetch("Replace with the link generated from python code/upload_screenshot", {  // Replace with your ngrok URL
+                    method: "POST",
+                    body: formData,
+                });
+
+                const result = await response.json();
+                displayTranscription(result);
+                videoTrack.stop();  // Stop the video track
+            } catch (error) {
+                console.error("Error capturing screenshot:", error);
+                alert("Failed to capture screenshot.");
+            }
+        }
+
+        // Display Response Function
+        function displayTranscription(result) {
+            const transcriptionsDiv = document.getElementById("transcriptions");
+            const transcriptionDiv = document.createElement("div");
+            transcriptionDiv.classList.add("transcription");
+
+            if (result.response) {
+                transcriptionDiv.textContent = "Response: " + result.response;
+                const utterance = new SpeechSynthesisUtterance(result.response);
+        
+                // Optional: Set properties for the speech
+                utterance.pitch = 1; // Voice pitch
+                utterance.rate = 1;  // Speech rate
+                utterance.volume = 1; // Volume (0 to 1)
+
+                // Speak the utterance
+                window.speechSynthesis.speak(utterance);
+            } else {
+                transcriptionDiv.textContent = "Error: " + result.error;
+            }
+            transcriptionsDiv.appendChild(transcriptionDiv);
+        }
+        async function playAudio(result) {
+            //try {
+                displayTranscription(result);
+                //const audioResponse = await fetch("Replace with the link generated from python code/download_audio",{
+                //        method:"GET"
+                //});
+                console.log("Going to send request");
+                const audioResponse = await fetch("Replace with the link generated from python code/download_audio");
+                console.log("Sent the request");
+                displayTranscription(result);
+                const audioBlob = await audioResponse.blob();
+                const audioObjectUrl = URL.createObjectURL(audioBlob);
+
+                const audio = new Audio(audioObjectUrl);
+                audio.play();
+
+                // Cleanup the object URL after playing
+                audio.onended = () => URL.revokeObjectURL(audioObjectUrl);
+            //} catch (error) {
+            //    console.error("Error fetching or playing audio:", error);
+            //}
+        }
+    </script>
+</body>
+</html>
